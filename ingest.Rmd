@@ -1,0 +1,89 @@
+---
+title: "ingest"
+output: html_document
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+library(data.table)
+
+options(scipen = 999)  # disable scientific notation
+
+# Function to load CSVs and normalize column names
+load_csv <- function(path) {
+  dt <- fread(path)
+  setnames(dt, toupper(names(dt)))
+  return(dt)
+}
+
+drg_info <- load_csv("data/DRG_INFODETAILS.csv")        
+drg_procedure <- load_csv("data/DRG_PROCEDURE.csv")     
+drg_diagnosis <- load_csv("data/DRG_DIAGNOSIS.csv")     
+drg_warning_error <- load_csv("data/DRG_WARNING_ERROR.csv") 
+drg_audittrail <- load_csv("data/DRG_AUDITRAIL.csv")    
+```
+
+# ---------------- Join all tables using SERIES / LHIO / CLAIMNUMBER ----------------
+
+```{r}
+# Join step by step
+master <- merge(
+  drg_info, drg_procedure,
+  by.x = c("SERIES","LHIO","CLAIMNUMBER"), 
+  by.y = c("SERIES","LHIO","CLAIM_ID"),
+  all.x = TRUE, suffixes = c("", "_PROC")
+)
+
+master <- merge(
+  master, drg_diagnosis,
+  by.x = c("SERIES","LHIO","CLAIMNUMBER"), 
+  by.y = c("SERIES","LHIO","CLAIM_ID"),
+  all.x = TRUE, suffixes = c("", "_DIAG")
+)
+
+master <- merge(
+  master, drg_warning_error,
+  by.x = c("SERIES","LHIO","CLAIMNUMBER"), 
+  by.y = c("SERIES","LHIO","CLAIM_ID"),
+  all.x = TRUE, suffixes = c("", "_WARN")
+)
+
+# DRG_AUDITTRAIL has no LHIO
+master <- merge(
+  master, drg_audittrail,
+  by = c("SERIES","CLAIMNUMBER"),
+  all.x = TRUE, suffixes = c("", "_AUDIT")
+)
+
+# Convert ID-like columns to character
+id_cols <- grep("ID$|CLAIMNUMBER$|SERIES|LHIO", names(master), value = TRUE)
+master[, (id_cols) := lapply(.SD, as.character), .SDcols = id_cols]
+
+# Create human-readable composite key
+master[, COMPOSITE_KEY := paste(ID, SERIES, LHIO, CLAIMNUMBER, sep = "_")]
+
+cat("Initial long table → Rows:", nrow(master), " Cols:", ncol(master), "\n")
+```
+
+# ---------------- Collapse duplicates into one row per composite key ----------------
+
+```{r}
+# Collapse duplicates per composite key
+collapse_fun <- function(x) {
+  vals <- unique(na.omit(x))
+  paste(vals, collapse = "||")
+}
+
+master_flat <- master[, lapply(.SD, collapse_fun), by = COMPOSITE_KEY]
+
+cat("Collapsed final table → Rows:", nrow(master_flat), " Cols:", ncol(master_flat), "\n")
+head(master_flat)
+```
+
+# ---------------- Export Master Table ----------------
+
+```{r}
+fwrite(master_flat, "data/master_table_flat.csv")
+cat("Master table saved to: data/master_table_flat.csv\n")
+fwrite(master, "data/master_table.csv")
+cat("Master table saved to: data/master_table.csv\n")
+```
