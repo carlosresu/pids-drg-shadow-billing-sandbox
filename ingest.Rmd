@@ -87,3 +87,60 @@ cat("Master table saved to: data/master_table_flat.csv\n")
 fwrite(master, "data/master_table.csv")
 cat("Master table saved to: data/master_table.csv\n")
 ```
+
+```{r}
+library(data.table)
+
+detect_type <- function(value) {
+  # Patterns
+  is_numeric <- grepl("^[0-9.]+$", value)
+  is_alpha <- grepl("^[A-Za-z]+$", value)
+  is_alnum <- grepl("^[A-Za-z0-9.]+$", value)
+  is_date <- grepl("^\\d{2}/\\d{2}/\\d{4}(\\s+\\d{2}\\.\\d{2}\\.\\d{2}\\.\\d+\\s*(AM|PM)?)?$", value, ignore.case = TRUE)
+  
+  if (is_date) {
+    return("DATE (any format)")
+  } else if (is_numeric) {
+    return("NUMERICAL (0-9. only)")
+  } else if (is_alpha) {
+    return("ALPHABETICAL (a-zA-Z only)")
+  } else if (is_alnum) {
+    return("ALPHANUMERICAL (a-zA-Z0-9.)")
+  } else {
+    return("STRING (also has char other than a-zA-Z0-9.)")
+  }
+}
+
+for (i in seq_along(master)) {
+  colname <- names(master)[i]
+  values <- unique(master[[i]])
+  values <- as.character(values)
+  values <- values[!is.na(values)]  # keep empty string if exists
+  
+  cat("COL", i, ": ", colname, "\n", sep = "")
+  
+  if (length(unique(values)) < 10) {
+    # Print all unique values if less than 10
+    cat(values, sep = "\n")
+  } else {
+    # Otherwise, one representative per type
+    types <- sapply(values[values != ""], detect_type)
+    reps <- tapply(values[values != ""], types, `[`, 1)
+    cat(reps, sep = "\n")
+  }
+  
+  # Determine all types present
+  types_all <- sapply(values[values != ""], detect_type)
+  types_unique <- unique(types_all)
+  
+  # Include EMPTY type if there are blank values
+  if (any(values == "")) {
+    types_unique <- c(types_unique, "EMPTY")
+  }
+  
+  cat("\nFORMAT:\n")
+  cat(types_unique, sep = "\n")
+  cat("\n\n")
+}
+
+```
