@@ -21,6 +21,8 @@ drg_diagnosis <- load_csv("data/DRG_DIAGNOSIS.csv")
 drg_warning_error <- load_csv("data/DRG_WARNING_ERROR.csv") 
 drg_audittrail <- load_csv("data/DRG_TRAIL.csv")    
 drg_result <- load_csv("data/DRG_RESULT.csv")
+cf2_hcp <- load_csv("data/CLAIMS HCP.csv")    
+cf2_Q1_to_Q2 <- load_csv("data/CLAIMS JAN TO JULY 2025.csv")
 ```
 
 ```{r}
@@ -30,6 +32,9 @@ str(drg_diagnosis)
 str(drg_warning_error)
 str(drg_audittrail)
 str(drg_result)
+str(cf2_hcp)
+str(cf2_Q1_to_Q2)
+str(master_flat)
 ```
 
 # ---------------- Join all tables using SERIES / LHIO / CLAIMNUMBER ----------------
@@ -62,6 +67,14 @@ master <- merge(
   master, drg_audittrail,
   by = c("SERIES","CLAIMNUMBER"),
   all.x = TRUE, suffixes = c("", "_AUDIT")
+)
+
+# DRG_RESULT uses CLAIMS_SERIES and CLAIM_ID; map to SERIES and CLAIMNUMBER
+master <- merge(
+  master, drg_result,
+  by.x = c("SERIES","LHIO","CLAIMNUMBER"),
+  by.y = c("CLAIMS_SERIES","LHIO","CLAIM_ID"),
+  all.x = TRUE, suffixes = c("", "_RESULT")
 )
 
 # Convert ID-like columns to character
@@ -106,7 +119,8 @@ detect_type <- function(value) {
   is_numeric <- grepl("^[0-9.]+$", value)
   is_alpha <- grepl("^[A-Za-z]+$", value)
   is_alnum <- grepl("^[A-Za-z0-9.]+$", value)
-  is_date <- grepl("^\\d{2}/\\d{2}/\\d{4}(\\s+\\d{2}\\.\\d{2}\\.\\d{2}\\.\\d+\\s*(AM|PM)?)?$", value, ignore.case = TRUE)
+  is_date <- grepl("^\\d{2}/\\d{2}/\\d{4}(\\s+\\d{2}\\.\\d{2}\\.\\d{2}\\.\\d+\\s*(AM|PM)?)?$", 
+                   value, ignore.case = TRUE)
   
   if (is_date) {
     return("DATE (any format)")
@@ -120,6 +134,7 @@ detect_type <- function(value) {
     return("STRING (also has char other than a-zA-Z0-9.)")
   }
 }
+
 
 for (i in seq_along(master)) {
   colname <- names(master)[i]
@@ -152,5 +167,46 @@ for (i in seq_along(master)) {
   cat(types_unique, sep = "\n")
   cat("\n\n")
 }
+```
 
+```{r}
+library(data.table)
+
+# Ensure all SERIES and LHIO are the same type
+master_flat[, SERIES := as.character(SERIES)]
+master_flat[, LHIO := as.character(LHIO)]
+
+cf2_hcp[, SERIES := as.character(SERIES)]
+cf2_hcp[, LHIO := as.character(LHIO)]
+
+cf2_Q1_to_Q2[, SERIES := as.character(SERIES)]
+cf2_Q1_to_Q2[, LHIO := as.character(LHIO)]
+
+# Combine CF2 sources into one
+cf2_all <- rbindlist(list(
+  cf2_hcp[, .(SERIES, LHIO)],
+  cf2_Q1_to_Q2[, .(SERIES, LHIO)]
+), use.names = TRUE, fill = TRUE)
+
+cf2_all <- unique(cf2_all)
+
+# Inner join to find matches
+matches <- merge(
+  unique(master_flat[, .(SERIES, LHIO)]),
+  cf2_all,
+  by = c("SERIES", "LHIO"),
+  all.x = FALSE,
+  all.y = FALSE
+)
+
+# Output results
+total_master <- uniqueN(master_flat[, .(SERIES, LHIO)])
+total_cf2 <- uniqueN(cf2_all)
+total_matches <- nrow(matches)
+
+cat("Unique claims in CF5 (SB):", total_master, "\n")
+cat("Unique claims in CF2 (combined):", total_cf2, "\n")
+cat("Claims found in both:", total_matches, "\n")
+cat("Percentage of SB claims found in CF2:",
+    round(100 * total_matches / total_master, 2), "%\n")
 ```
