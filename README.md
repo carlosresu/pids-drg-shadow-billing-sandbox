@@ -1,6 +1,28 @@
-# Shadow billing sandbox (PIDS DRG)
+# pids-drg-shadow-billing-sandbox
 
 Exploratory RMarkdown notebooks that join DRG claim CSV exports into master tables for analysis and quality checks.
+
+**Last Updated:** December 2025
+
+---
+
+## Progress Since June 2025
+
+| Date | Milestone |
+|------|-----------|
+| **Jun-Aug 2025** | Initial ingest.Rmd with basic CSV joins |
+| **Sep 2025** | Added composite key generation (`SERIES_LHIO_CLAIMNUMBER`) |
+| **Oct 2025** | Added ingest_v2.Rmd with CF2/HCP source merging |
+| **Nov 2025** | Added renv project for reproducible package versions |
+| **Dec 2025** | Outputs master_table.csv and master_table_flat.csv |
+
+### Current Status
+
+- **Input:** DRG_INFO, DRG_PROCEDURE, DRG_DIAGNOSIS, DRG_WARNING_ERROR, DRG_TRAIL, DRG_RESULT CSVs
+- **Output:** `data/master_table.csv`, `data/master_table_flat.csv`
+- **Runtime:** data.table-based joins for performance
+
+---
 
 ## Data expected (place in `data/`)
 - `DRG_INFO.csv`, `DRG_PROCEDURE.csv`, `DRG_DIAGNOSIS.csv`, `DRG_WARNING_ERROR.csv`, `DRG_TRAIL.csv`, `DRG_RESULT.csv`
